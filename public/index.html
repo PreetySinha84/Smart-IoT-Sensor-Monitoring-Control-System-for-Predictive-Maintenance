@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Smart IoT Sensor Dashboard</title>
+
+  <!-- Firebase SDK -->
+  <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-database.js"></script>
+
+  <!-- Chart.js -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+  <style>
+    body {
+      font-family: 'Segoe UI', sans-serif;
+      background: linear-gradient(to right, #f6f9fc, #e0f7fa);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 40px 20px;
+      color: #333;
+    }
+
+    h1 {
+      color: #2c3e50;
+      margin-bottom: 30px;
+    }
+
+    .sensor-box {
+      background: #ffffff;
+      padding: 25px 30px;
+      border-radius: 15px;
+      box-shadow: 0 10px 20px rgba(0, 0, 0, 0.15);
+      width: 320px;
+      text-align: left;
+      margin-bottom: 30px;
+    }
+
+    .sensor-box h3 {
+      font-size: 20px;
+      margin: 10px 0;
+    }
+
+    .sensor-box span {
+      font-weight: bold;
+      color: #1e88e5;
+    }
+
+    .switch-box {
+      background: #ffffff;
+      padding: 20px;
+      border-radius: 15px;
+      box-shadow: 0 8px 18px rgba(0, 0, 0, 0.1);
+      width: 320px;
+      text-align: center;
+      margin-bottom: 30px;
+    }
+
+    .status {
+      font-size: 22px;
+      margin: 15px 0;
+      color: #555;
+    }
+
+    .btn {
+      font-size: 18px;
+      padding: 10px 25px;
+      margin: 10px 5px;
+      border: none;
+      border-radius: 25px;
+      cursor: pointer;
+      color: white;
+      transition: background-color 0.3s ease;
+      box-shadow: 0 5px 12px rgba(0, 0, 0, 0.2);
+    }
+
+    .on-btn { background-color: #4CAF50; }
+    .on-btn:hover { background-color: #45a049; }
+    .off-btn { background-color: #f44336; }
+    .off-btn:hover { background-color: #e53935; }
+
+    .chart-container {
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+      width: 340px;
+      margin-bottom: 30px;
+    }
+
+    .chart-box {
+      background: #ffffff;
+      padding: 15px;
+      border-radius: 12px;
+      box-shadow: 0 10px 18px rgba(0, 0, 0, 0.1);
+      height: 180px;
+    }
+
+    canvas {
+      width: 100% !important;
+      height: 130px !important;
+    }
+
+    @media (max-width: 400px) {
+      .sensor-box, .switch-box, .chart-container {
+        width: 95%;
+      }
+    }
+  </style>
+</head>
+<body>
+
+  <h1>📡 Smart Sensor Dashboard</h1>
+
+  <div class="sensor-box">
+    <h3>Temperature 🌡: <span id="temp">--</span> °C</h3>
+    <h3>Humidity 💧: <span id="hum">--</span> %</h3>
+    <h3>Pressure 🌬: <span id="press">--</span> hPa</h3>
+    <h3>Gas Level ⛽: <span id="gas">--</span> ppm</h3>
+  </div>
+
+  <!-- 📊 Chart Area -->
+  <div class="chart-container">
+    <div class="chart-box"><canvas id="tempChart"></canvas></div>
+    <div class="chart-box"><canvas id="humChart"></canvas></div>
+    <div class="chart-box"><canvas id="pressChart"></canvas></div>
+    <div class="chart-box"><canvas id="gasChart"></canvas></div>
+  </div>
+
+  <!-- 🔌 Switch Control -->
+  <div class="switch-box">
+    <h2>🔌 Sensor Power Control</h2>
+    <p class="status">Switch Status: <span id="switchStatus">Loading...</span></p>
+    <button class="btn on-btn" onclick="toggleSwitch('ON')">Turn ON</button>
+    <button class="btn off-btn" onclick="toggleSwitch('OFF')">Turn OFF</button>
+  </div>
+
+  <script>
+    const firebaseConfig = {
+      apiKey: "<YOUR_FIREBASE_API_KEY>",
+      authDomain: "YOUR_PROJECT_ID>.firebaseapp.com",
+      databaseURL: "https://<YOUR_PROJECT_ID>.firebaseio.com",
+      projectId: "<YOUR_PROJECT_ID>",
+      storageBucket: "<YOUR_PROJECT_ID>.appspot.com",
+      messagingSenderId: "<YOUR_MESSAGING_SENDER_ID>",
+      appId: "<YOUR_FIREBASE_APP_ID"
+    };
+
+    firebase.initializeApp(firebaseConfig);
+    const db = firebase.database();
+
+    const tempEl = document.getElementById("temp");
+    const humEl = document.getElementById("hum");
+    const pressEl = document.getElementById("press");
+    const gasEl = document.getElementById("gas");
+    const switchStatusEl = document.getElementById("switchStatus");
+
+    // Chart data arrays
+    let labels = [], tempData = [], humData = [], pressData = [], gasData = [];
+
+    function createChart(canvasId, label, color, dataArray) {
+      return new Chart(document.getElementById(canvasId).getContext('2d'), {
+        type: 'line',
+        data: {
+          labels: labels,
+          datasets: [{
+            label: label,
+            data: dataArray,
+            borderColor: color,
+            fill: false,
+            tension: 0.3
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: { display: true }
+          },
+          scales: {
+            x: { display: false }
+          }
+        }
+      });
+    }
+
+    const tempChart = createChart("tempChart", "Temperature (°C)", "#e74c3c", tempData);
+    const humChart  = createChart("humChart", "Humidity (%)", "#3498db", humData);
+    const pressChart = createChart("pressChart", "Pressure (hPa)", "#2ecc71", pressData);
+    const gasChart  = createChart("gasChart", "Gas (ppm)", "#f1c40f", gasData);
+
+    function updateCharts(time, t, h, p, g) {
+      if (labels.length > 10) {
+        labels.shift(); tempData.shift(); humData.shift(); pressData.shift(); gasData.shift();
+      }
+      labels.push(time);
+      tempData.push(t); humData.push(h); pressData.push(p); gasData.push(g);
+      tempChart.update(); humChart.update(); pressChart.update(); gasChart.update();
+    }
+
+    db.ref("SensorData").on("value", snapshot => {
+      const data = snapshot.val();
+      const t = parseFloat(data.temperature || 0).toFixed(1);
+      const h = parseFloat(data.humidity || 0).toFixed(1);
+      const p = parseFloat(data.pressure || 0).toFixed(2);
+      const g = parseInt(data.gas || 0);
+
+      const time = new Date().toLocaleTimeString().split(" ")[0];
+
+      tempEl.textContent = t;
+      humEl.textContent = h;
+      pressEl.textContent = p;
+      gasEl.textContent = g;
+
+      updateCharts(time, t, h, p, g);
+    });
+
+    db.ref("SensorControl/Switch").on("value", snapshot => {
+      switchStatusEl.textContent = snapshot.val() || "OFF";
+    });
+
+    function toggleSwitch(state) {
+      db.ref("SensorControl/Switch").set(state);
+    }
+  </script>
+</body>
+</html>
